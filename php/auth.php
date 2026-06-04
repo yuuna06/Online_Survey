@@ -97,9 +97,8 @@ function check_csrf($token){
     }
 
     //セッションに保存されたCSRFトークンと一致するか確認する
-    if(isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token)){
-        return true;
-    }else{
+    if(isset($_SESSION['csrf_token']) && !hash_equals($_SESSION['csrf_token'], $token)){
+        
         unset($_SESSION['csrf_token']);// トークンが不正な場合はセッションから削除して新しいトークンを生成する
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // 新しいトークンを生成して保存する
         die('不正なリクエストです。');
