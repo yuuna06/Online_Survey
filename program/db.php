@@ -32,7 +32,7 @@ try {
 // ========================================
 // 2. エラー処理ユーティリティ
 // ========================================
-
+//修正必要。ゆばちゃんが作成したプログラムの関数を使うようにするため。この関数はテストの時は残すが、本番はコメント文にする。
 /**
  * DB接続・SQL実行エラー時にエラーメッセージを表示する
  */
@@ -267,6 +267,22 @@ function update_notification_flag(int $survey_id): bool
     $sql = 'UPDATE surveys SET is_notified = true WHERE survey_id = :survey_id';
     executeQuery($sql, [':survey_id' => $survey_id]);
     return true;
+}
+
+/**
+ * 期限切れで未通知のアンケート一覧を取得する
+ */
+function get_expired_surveys_to_notify(int $user_id): array
+{
+    $sql = 'SELECT survey_id, title, end_at FROM surveys 
+            WHERE creator_id = :user_id 
+              AND is_notified = FALSE 
+              AND end_at < NOW()';
+
+    $params = [':user_id' => $user_id];
+    $stmt = executeQuery($sql, $params);
+
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // ========================================
