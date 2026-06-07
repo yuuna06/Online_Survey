@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once '../php/db.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 echo "<!doctype html><html><head><meta charset=\"UTF-8\"><title>DB操作関数テスト</title></head><body>";
