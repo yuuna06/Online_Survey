@@ -148,8 +148,19 @@ async function toggleLike(commentId) {
 async function autoSave(type) {
     const formElement = document.getElementById('main-form');
     if (!formElement) return;
-    // フォームの内容をまるごと取得
-    const formDataObj = Object.fromEntries(new FormData(formElement));
+    // フォームの内容をまるごと取得（配列対応）
+    const fd = new FormData(formElement);
+    const formDataObj = {};
+    for (const [k, v] of fd.entries()) {
+        // name が配列形式（例: q0[]）の場合は末尾の [] を取り除いて正規化
+        const name = k.endsWith('[]') ? k.slice(0, -2) : k;
+        if (Object.prototype.hasOwnProperty.call(formDataObj, name)) {
+            if (!Array.isArray(formDataObj[name])) formDataObj[name] = [formDataObj[name]];
+            formDataObj[name].push(v);
+        } else {
+            formDataObj[name] = v;
+        }
+    }
 
     const API_ENDPOINT = '/php/api.php';
     const formData = new FormData();
