@@ -1,4 +1,3 @@
-
 <?php
 date_default_timezone_set('Asia/Tokyo');
 function writeLog(string $dir ,string $level, string $message): void

@@ -277,6 +277,128 @@ function get_surveys_list(int $limit, int $offset): array
 }
 
 /**
+ * ホームページのアンケート一覧を取得する
+ *
+ * @param string $listType  一覧の種類（作成したアンケート / 回答したアンケート / アンケート / 調査結果）
+ * @param string $sortOrder 並び替え順（開始期限 / 新着 / 回答数）
+ * @param int|null $user_id ユーザーID（作成・回答・調査結果表示時に必要）
+ * @return array
+ */
+function get_homepage_survey_list(string $listType, string $sortOrder, ?int $user_id = null): array
+{
+    $typeMap = [
+        '作成したアンケート' => 'created',
+        '回答したアンケート' => 'answered',
+        'アンケート' => 'all',
+        '調査結果' => 'results',
+    ];
+    $orderMap = [
+        '開始期限' => 'COALESCE(s.end_at, CURRENT_TIMESTAMP) ASC',
+        '新着' => 's.created_at DESC',
+        '回答数' => 'COALESCE(resp.response_count, 0) DESC, s.created_at DESC',
+    ];
+
+    if (!isset($typeMap[$listType]) || !isset($orderMap[$sortOrder])) {
+        return [];
+    }
+
+    $type = $typeMap[$listType];
+    $orderBy = $orderMap[$sortOrder];
+
+    $sql = 'SELECT s.survey_id,
+                   s.title,
+                   s.end_at,
+                   u.account_name AS creator,
+                   COALESCE(resp.response_count, 0) AS response_count,
+                   s.survey_spec
+            FROM surveys s
+            JOIN users u ON u.user_id = s.creator_id
+            LEFT JOIN (
+                SELECT survey_id, COUNT(*) AS response_count
+                FROM responses
+                GROUP BY survey_id
+            ) resp ON resp.survey_id = s.survey_id';
+
+    $conditions = [];
+    $params = [];
+
+    switch ($type) {
+        case 'created':
+            if ($user_id === null) {
+                return [];
+            }
+            $conditions[] = 's.creator_id = :user_id';
+            $params[':user_id'] = $user_id;
+            break;
+        case 'answered':
+            if ($user_id === null) {
+                return [];
+            }
+            $conditions[] = 'EXISTS (SELECT 1 FROM responses r WHERE r.survey_id = s.survey_id AND r.user_id = :user_id)';
+            $params[':user_id'] = $user_id;
+            break;
+        case 'results':
+            $conditions[] = 's.end_at <= NOW()';
+            if ($user_id !== null) {
+                $conditions[] = 's.creator_id = :user_id';
+                $params[':user_id'] = $user_id;
+            }
+            break;
+        case 'all':
+        default:
+            break;
+    }
+
+    if ($conditions !== []) {
+        $sql .= ' WHERE ' . implode(' AND ', $conditions);
+    }
+
+    $sql .= ' ORDER BY ' . $orderBy;
+
+    $stmt = executeQuery($sql, $params);
+    $rows = $stmt->fetchAll();
+
+    foreach ($rows as &$row) {
+        $surveySpec = decodeJson($row['survey_spec'] ?? '');
+        $row['deadline'] = $row['end_at'];
+        $row['duration'] = parse_survey_duration($surveySpec);
+        unset($row['survey_spec'], $row['end_at']);
+    }
+
+    return array_map(static function (array $row): array {
+        return [
+            'survey_id' => (int)$row['survey_id'],
+            'title' => (string)$row['title'],
+            'deadline' => $row['deadline'] !== null ? $row['deadline'] : null,
+            'creator' => (string)$row['creator'],
+            'response_count' => (int)$row['response_count'],
+            'duration' => $row['duration'],
+        ];
+    }, $rows);
+}
+
+/**
+ * survey_spec から所要時間を取得する
+ */
+function parse_survey_duration(array $surveySpec): string
+{
+    if (isset($surveySpec['estimated_minutes']) && $surveySpec['estimated_minutes'] !== '') {
+        return (string)$surveySpec['estimated_minutes'] . '分';
+    }
+
+    if (isset($surveySpec['duration']) && $surveySpec['duration'] !== '') {
+        return (string)$surveySpec['duration'];
+    }
+
+    if (isset($surveySpec['questions']) && is_array($surveySpec['questions'])) {
+        $questionCount = count($surveySpec['questions']);
+        return $questionCount > 0 ? (string)$questionCount . '分' : '';
+    }
+
+    return '';
+}
+
+/**
  * 公開キーまたは結果キーからアンケート情報を取得する
  */
 function get_survey_by_key(string $key, string $type): ?array
