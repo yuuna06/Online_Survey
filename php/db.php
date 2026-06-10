@@ -10,7 +10,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/logger.php';
+require_once __DIR__ . '/error.php';
 
 // ========================================
 // 1. DB接続設定
@@ -33,91 +33,11 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 } catch (PDOException $e) {
-    renderDbErrorModal($e);
-    exit;
+    renderDbError($e);
 }
 
 // ========================================
-// 2. エラー処理ユーティリティ
-// ========================================
-
-/**
- * DB接続・SQL実行エラー時にエラーメッセージを表示する
- */
-function renderDbErrorModal(PDOException $e): void
-{
-    $errorMessage = sprintf(
-        '%s in %s on line %d [code=%d]',
-        $e->getMessage(),
-        $e->getFile(),
-        $e->getLine(),
-        $e->getCode()
-    );
-    writeLog('db', 'ERROR', $errorMessage);
-    // API からの呼び出しかどうか判定するユーティリティ
-    $isApi = false;
-    if (php_sapi_name() === 'cli') {
-        $isApi = false;
-    } else {
-        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
-        $xhr = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
-        $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
-
-        if (stripos($accept, 'application/json') !== false) {
-            $isApi = true;
-        } elseif (strcasecmp($xhr, 'XMLHttpRequest') === 0) {
-            $isApi = true;
-        } elseif ($script === 'api.php') {
-            $isApi = true;
-        }
-    }
-
-    // ダウンロードスクリプトかどうか判定（download.php の場合はバイナリ期待）
-    $isDownload = false;
-    if (!isset($script)) {
-        $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
-    }
-    if ($script === 'download.php') {
-        $isDownload = true;
-    }
-
-    // 出力前に既存のバッファを消す（HTMLやバイナリ混入を防ぐ）
-    while (ob_get_level()) {
-        @ob_end_clean();
-    }
-
-    // 共通ステータス
-    http_response_code(500);
-
-    // API 呼び出しなら JSON でエラーを返す
-    if ($isApi) {
-        header('Content-Type: application/json; charset=UTF-8');
-        echo json_encode([
-            'status' => 'error',
-            'message' => '通信が切れました。もう一度お試しください。'
-        ]);
-        exit;
-    }
-
-    // ダウンロード系はプレーンテキストで短いメッセージを返して終了
-    if ($isDownload) {
-        header('Content-Type: text/plain; charset=UTF-8');
-        echo '通信が切れました。ダウンロードを中止しました。';
-        exit;
-    }
-
-    // 通常の画面表示向けに従来どおり HTML を出す
-    $message = '通信が切れました。もう一度お試しください。';
-    $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    header('Content-Type: text/html; charset=UTF-8');
-    echo '<!doctype html><html><head><meta charset="UTF-8"><title>DB Error</title></head><body>';
-    echo '<script>window.onload = function() { alert("' . $safeMessage . '"); };</script>';
-    echo '</body></html>';
-    exit;
-}
-
-// ========================================
-// 3. DB接続・クエリ実行ユーティリティ
+// 2. DB接続・クエリ実行ユーティリティ
 // ========================================
 
 /**
@@ -144,8 +64,7 @@ function executeQuery(string $sql, array $params = []): PDOStatement
         $stmt->execute($params);
         return $stmt;
     } catch (PDOException $e) {
-        renderDbErrorModal($e);
-        exit;
+        renderDbError($e);
     }
 }
 
@@ -221,8 +140,7 @@ function delete_user(int $user_id): bool
         return true;
     } catch (PDOException $e) {
         $pdo->rollBack();
-        renderDbErrorModal($e);
-        exit;
+        renderDbError($e);
     }
 }
 

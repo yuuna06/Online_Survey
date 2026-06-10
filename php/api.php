@@ -9,6 +9,7 @@
  */
 
 // 1. 外部依存ファイルの読み込み
+require_once __DIR__ . '/error.php';
 require_once __DIR__ . '/db.php'; // DB ヘルパー関数を利用
 // auth.php / security.php を利用してセッション・CSRF・NGワードを扱う
 if (file_exists(__DIR__ . '/auth.php')) {
@@ -69,15 +70,11 @@ function validate_csrf(): void
 {
     $token = get_request_csrf_token();
     if ($token === null) {
-        http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'CSRF token missing.']);
-        exit;
+        renderApiError('CSRF token missing.', 400);
     }
 
     if (!isset($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $token)) {
-        http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'Invalid CSRF token.']);
-        exit;
+        renderApiError('Invalid CSRF token.', 400);
     }
 }
 
@@ -121,9 +118,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 // 3. リクエストメソッドの検証 (POST以外は受け付けない)
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid Request Method']);
-    exit;
+    renderApiError('Invalid Request Method', 405);
 }
 
 // 4. アクションの分岐処理
@@ -169,9 +164,7 @@ try {
 
             // セキュリティチェック
             if (!isValidContent($raw_text)) {
-                http_response_code(400);
-                echo json_encode(['status' => 'error', 'message' => '不適切な内容が含まれています。']);
-                exit;
+                renderApiError('不適切な内容が含まれています。', 400);
             }
 
             // DB ヘルパーを使って挿入（db.php の insert_comment を利用）
@@ -228,10 +221,5 @@ try {
     }
 
 } catch (Exception $e) {
-    // 予期せぬエラーはすべてここで捕捉し、JSON形式で返す
-    http_response_code(400);
-    echo json_encode([
-        'status' => 'error',
-        'message' => $e->getMessage()
-    ]);
+    renderApiError($e->getMessage(), 400, $e);
 }
